@@ -2,8 +2,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineChannel, GET, POST } from "@grok/agent-sdk/channels";
 import * as z from "zod/v4";
-import { planDuplicadosSchema } from "../lib/contratos";
+import { planDuplicadosSchema, resultadoRunsSchema } from "../lib/contratos";
 import { aplicarDuplicados, planDuplicados } from "../lib/eliminar-duplicados";
+import { eliminarRuns } from "../lib/eliminar-runs";
 
 const sessionsDir = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -27,6 +28,15 @@ export default defineChannel({
           borrados: resultado.borrados,
           conservados: resultado.conservar.map((sesion) => sesion.id),
         });
+      },
+    }),
+    POST("/eliminar-runs", {
+      bodySchema: z.object({
+        ids: z.array(z.string().regex(/^ses_[a-z0-9]+$/)).max(500),
+      }),
+      async handler(_request, { body }) {
+        const resultado = resultadoRunsSchema.parse(await eliminarRuns(sessionsDir, body.ids));
+        return Response.json(resultado);
       },
     }),
   ],

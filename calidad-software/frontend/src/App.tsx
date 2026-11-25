@@ -7,7 +7,7 @@ import {
   listarSesiones,
   type SesionRemota,
 } from "./agentApi";
-import { cargarPlan, eliminarDuplicados } from "./api";
+import { cargarPlan, eliminarDuplicados, eliminarRuns } from "./api";
 import { AgentChat, SESION_GUARDADA } from "./components/AgentChat";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { DuplicateDiffModal } from "./components/DuplicateDiffModal";
@@ -104,6 +104,14 @@ export default function App() {
   const turnos =
     sesiones.length === 0 ? null : sesiones.reduce((total, sesion) => total + sesion.turnCount, 0) / sesiones.length;
 
+  const runsVisibles = useMemo(
+    () =>
+      sesiones.filter((sesion) =>
+        `${sesion.sessionId} ${sesion.channelId} ${sesion.mode}`.toLowerCase().includes(filtro.trim().toLowerCase()),
+      ),
+    [sesiones, filtro],
+  );
+
   const pareja = seleccion
     ? (plan?.conservar.find((sesion) => sesion.clave === seleccion.clave) ?? null)
     : null;
@@ -122,6 +130,43 @@ export default function App() {
       setSeleccion(null);
     } catch (fallo: unknown) {
       setAviso(fallo instanceof Error ? fallo.message : "No se pudieron borrar los duplicados.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function borrarRuns() {
+    const ids = runsVisibles.filter((sesion) => !sesion.running).map((sesion) => sesion.sessionId);
+    if (ids.length === 0) {
+      return;
+    }
+    if (!window.confirm(`¿Eliminar ${ids.length} runs? Esas sesiones dejan de aparecer en el historial.`)) {
+      return;
+    }
+    setOcupado(true);
+    setAviso("");
+    try {
+      const resultado = await eliminarRuns(ids);
+      const guardada = sessionStorage.getItem(SESION_GUARDADA);
+      if (guardada) {
+        try {
+          const datos = JSON.parse(guardada) as { sessionId?: string };
+          if (datos.sessionId && resultado.borrados.includes(datos.sessionId)) {
+            sessionStorage.removeItem(SESION_GUARDADA);
+            setChatKey((valor) => valor + 1);
+          }
+        } catch {
+          sessionStorage.removeItem(SESION_GUARDADA);
+        }
+      }
+      setAviso(
+        resultado.fallidos.length === 0
+          ? `Se eliminaron ${resultado.borrados.length} runs.`
+          : `Se eliminaron ${resultado.borrados.length} runs. ${resultado.fallidos.length} siguen en uso.`,
+      );
+      recargar();
+    } catch (fallo: unknown) {
+      setAviso(fallo instanceof Error ? fallo.message : "No se pudieron eliminar los runs.");
     } finally {
       setOcupado(false);
     }
@@ -191,6 +236,16 @@ export default function App() {
               <div className="flex-grow-1" style={{ minWidth: "16rem" }}>
                 <FilterBar valor={filtro} onChange={setFiltro} placeholder="Filtrar por sesión, canal o propósito" />
               </div>
+              {tab === "runs" ? (
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={ocupado || runsVisibles.length === 0 || runsVisibles.every((sesion) => sesion.running)}
+                  onClick={() => void borrarRuns()}
+                >
+                  {ocupado ? "Eliminando…" : "Eliminar runs"}
+                </button>
+              ) : null}
               {tab === "duplicados" ? (
                 <div className="btn-group">
                   <button type="button" className="btn btn-danger btn-sm" disabled={ocupado || !plan || plan.eliminar.length === 0} onClick={() => void borrar()}>
@@ -216,11 +271,9 @@ export default function App() {
                   </li>
                 ))}
               </ul>
-            ) : tab === "runs" && sesiones.length > 0 ? (
+            ) : tab === "runs" && runsVisibles.length > 0 ? (
               <ul className="list-group list-group-flush">
-                {sesiones
-                  .filter((sesion) => `${sesion.sessionId} ${sesion.channelId} ${sesion.mode}`.toLowerCase().includes(filtro.trim().toLowerCase()))
-                  .map((sesion) => (
+                {runsVisibles.map((sesion) => (
                     <li className="list-group-item bg-transparent" key={sesion.sessionId}>
                       <span className="mono">{sesion.sessionId}</span>
                       <span className="badge text-bg-light border ms-2">{sesion.mode || "chat"}</span>

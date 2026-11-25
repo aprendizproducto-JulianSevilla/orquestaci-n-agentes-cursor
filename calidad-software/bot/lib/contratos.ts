@@ -20,6 +20,12 @@ export const resultadoDuplicadosSchema = z.object({
   conservados: z.array(z.string()),
 });
 
+export const resultadoRunsSchema = z.object({
+  borrados: z.array(z.string()),
+  fallidos: z.array(z.string()),
+});
+
 export type SesionContrato = z.infer<typeof sesionSchema>;
 export type PlanDuplicadosContrato = z.infer<typeof planDuplicadosSchema>;
 export type ResultadoDuplicados = z.infer<typeof resultadoDuplicadosSchema>;
+export type ResultadoRuns = z.infer<typeof resultadoRunsSchema>;
