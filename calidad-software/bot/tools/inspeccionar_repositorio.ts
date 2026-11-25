@@ -138,6 +138,30 @@ async function listar(raiz: string): Promise<{
   return { archivos, senales, truncado: false };
 }
 
+export type Inventario = {
+  truncado: boolean;
+  archivos: { ruta: string; bytes: number }[];
+  senales: { ruta: string; areas: string[] }[];
+  documentos: { ruta: string; contenido: string }[];
+};
+
+export async function inventariarDirectorio(raiz: string): Promise<Inventario> {
+  const { archivos, senales, truncado } = await listar(raiz);
+  const documentos: { ruta: string; contenido: string }[] = [];
+  for (const nombre of DOCUMENTOS) {
+    try {
+      const contenido = await readFile(join(raiz, nombre), "utf8");
+      documentos.push({
+        ruta: nombre,
+        contenido: contenido.slice(0, MAX_TEXTO),
+      });
+    } catch {
+      continue;
+    }
+  }
+  return { truncado, archivos, senales, documentos };
+}
+
 export default defineTool({
   description:
     "Inventaría un repositorio local. Recibe la ruta absoluta de la raíz. Devuelve hasta 80 archivos, el README o el manifiesto, y señales de pruebas, CI/CD, nube, Sonar, Postman, interfaces y seguridad. No lee secretos ni node_modules.",
@@ -156,19 +180,7 @@ export default defineTool({
     if (!info.isDirectory()) {
       return { ok: false as const, motivo: "no_es_directorio", ruta: raiz };
     }
-    const { archivos, senales, truncado } = await listar(raiz);
-    const documentos: { ruta: string; contenido: string }[] = [];
-    for (const nombre of DOCUMENTOS) {
-      try {
-        const contenido = await readFile(join(raiz, nombre), "utf8");
-        documentos.push({
-          ruta: nombre,
-          contenido: contenido.slice(0, MAX_TEXTO),
-        });
-      } catch {
-        continue;
-      }
-    }
-    return { ok: true as const, raiz, truncado, archivos, senales, documentos };
+    const inventario = await inventariarDirectorio(raiz);
+    return { ok: true as const, raiz, ...inventario };
   },
 });

@@ -1,0 +1,65 @@
+:root {
+  --panel-bg: #f4f6f8;
+  --panel-line: #e3e8ee;
+  --panel-ink: #1c2430;
+}
+[data-bs-theme="dark"] {
+  --panel-bg: #10141a;
+  --panel-line: #2a3340;
+  --panel-ink: #e8edf2;
+}
+body {
+  margin: 0;
+  background: var(--panel-bg);
+  color: var(--panel-ink);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+}
+.topbar {
+  border-bottom: 1px solid var(--panel-line);
+  background: var(--bs-body-bg);
+}
+.avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #1f3a4d;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+.nav-tabs .nav-link {
+  color: var(--bs-secondary-color);
+  border: 0;
+}
+.nav-tabs .nav-link.active {
+  color: var(--bs-body-color);
+  background: transparent;
+  border-bottom: 2px solid var(--bs-body-color);
+}
+.flujo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.flujo .flecha {
+  color: var(--bs-secondary-color);
+}
+.tabla-panel {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--panel-line);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.tabla-panel table {
+  margin-bottom: 0;
+}
+.offcanvas {
+  width: min(440px, 100vw);
+}

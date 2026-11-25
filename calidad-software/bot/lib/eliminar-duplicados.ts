@@ -5,6 +5,10 @@ type Sesion = {
   id: string;
   clave: string;
   updatedAt: string;
+  channelId: string;
+  purpose: string;
+  mode: string;
+  turnCount: number;
 };
 
 export type PlanDuplicados = {
@@ -35,15 +39,18 @@ async function leerSesiones(sessionsDir: string): Promise<Sesion[]> {
         turnCount?: number;
         updatedAt?: string;
       };
+      const channelId = data.channelId ?? "";
+      const purpose = data.purpose ?? "live";
+      const mode = data.mode ?? "";
+      const turnCount = data.turnCount ?? 0;
       sesiones.push({
         id: nombre,
-        clave: [
-          data.channelId ?? "",
-          data.purpose ?? "live",
-          data.mode ?? "",
-          String(data.turnCount ?? 0),
-        ].join("|"),
+        clave: [channelId, purpose, mode, String(turnCount)].join("|"),
         updatedAt: data.updatedAt ?? "",
+        channelId,
+        purpose,
+        mode,
+        turnCount,
       });
     } catch {
       continue;
