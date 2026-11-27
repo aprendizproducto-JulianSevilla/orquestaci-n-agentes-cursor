@@ -5,7 +5,7 @@
   "description": "agent project: calidad-software",
   "scripts": {
     "check": "tsc --noEmit",
-    "dev": "agent-sdk dev"
+    "dev": "agent-sdk dev --no-playground"
   },
   "dependencies": {
     "@grok/agent-sdk": "^0.7.2",
