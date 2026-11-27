@@ -16,20 +16,29 @@ function recortar(texto: string): string {
   return limpio.length > TOPE ? `${limpio.slice(0, TOPE)}\n[salida truncada]` : limpio;
 }
 
-function correr(bin: string, args: string[], cwd: string, timeoutMs: number, shell: boolean): Promise<Salida> {
+function entornoReducido(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const nombre of ["PATH", "Path", "NODE_ENV", "HOME", "USERPROFILE", "TEMP", "TMP"]) {
+    const valor = process.env[nombre];
+    if (valor !== undefined && valor !== "") {
+      env[nombre] = valor;
+    }
+  }
+  env.CI = "true";
+  env.FORCE_COLOR = "0";
+  env.NPM_CONFIG_FUND = "false";
+  env.GIT_TERMINAL_PROMPT = "0";
+  return env;
+}
+
+export function correr(bin: string, args: string[], cwd: string, timeoutMs: number, shell: boolean): Promise<Salida> {
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
       cwd,
       shell,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        CI: "true",
-        FORCE_COLOR: "0",
-        NPM_CONFIG_FUND: "false",
-        GIT_TERMINAL_PROMPT: "0",
-      },
+      env: entornoReducido(),
     });
     let stdout = "";
     let stderr = "";

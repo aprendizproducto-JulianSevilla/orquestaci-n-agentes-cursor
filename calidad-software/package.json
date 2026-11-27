@@ -2,9 +2,10 @@
   "name": "calidad-software",
   "private": true,
   "type": "module",
-  "description": "agent project: calidad-software",
+  "description": "Coordinador de calidad con analista, Dev y QA sobre repositorios locales y de GitHub.",
   "scripts": {
     "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --import ./tests/registrar.mjs --test tests/publicar-dictamen.test.ts tests/verificar-proyecto.test.ts",
     "dev": "agent-sdk dev --no-playground"
   },
   "dependencies": {

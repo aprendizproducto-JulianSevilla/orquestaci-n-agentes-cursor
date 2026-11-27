@@ -57,8 +57,29 @@ function dictamenDe(informe: Informe): string {
     (mensaje) => mensaje.rol === "Coordinador" && /veredicto|informe ejecutivo/i.test(mensaje.texto),
   );
   const elegido = candidatos.at(-1)?.texto ?? "";
-  const marca = elegido.search(/##\s+Informe ejecutivo/i);
-  return limpiar(marca >= 0 ? elegido.slice(marca) : elegido);
+  const marcas = [...elegido.matchAll(/^##\s+Informe ejecutivo\b.*$/gim)];
+  if (marcas.length === 0) {
+    return limpiar(elegido);
+  }
+  const inicio = marcas[0]?.index ?? 0;
+  const fin = marcas.length > 1 ? (marcas[1]?.index ?? elegido.length) : elegido.length;
+  return limpiar(elegido.slice(inicio, fin));
+}
+
+function unSoloInforme(markdown: string): string {
+  const lineas = markdown.split("\n");
+  let vistos = 0;
+  const salida: string[] = [];
+  for (const linea of lineas) {
+    if (/^#{1,3}\s+Informe ejecutivo\b/i.test(linea.trim())) {
+      vistos += 1;
+      if (vistos > 1) {
+        break;
+      }
+    }
+    salida.push(linea);
+  }
+  return salida.join("\n").trimEnd() + "\n";
 }
 
 function linea(texto: string, etiqueta: string): string {
@@ -262,5 +283,5 @@ export function construirReporte(informe: Informe, ahora = new Date()): Reporte 
     observacionesTexto,
     ``,
   ].join("\n");
-  return { archivo: `reporte-calidad-${slug(proyecto)}-${dia}.md`, markdown };
+  return { archivo: `reporte-calidad-${slug(proyecto)}-${dia}.md`, markdown: unSoloInforme(markdown) };
 }
