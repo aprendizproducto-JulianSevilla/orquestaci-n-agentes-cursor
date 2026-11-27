@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PlanDuplicadosContrato, SesionContrato } from "@contratos";
+import type { AnalisisDuplicadosContrato, MetricasContrato, PlanDuplicadosContrato, SesionContrato } from "@contratos";
 import {
   lineasDe,
   listarEvaluaciones,
@@ -7,8 +7,9 @@ import {
   listarSesiones,
   type SesionRemota,
 } from "./agentApi";
-import { cargarPlan, eliminarDuplicados, eliminarRuns } from "./api";
+import { cargarAnalisis, cargarMetricas, cargarPlan, eliminarDuplicados, eliminarRuns, guardarInstantanea } from "./api";
 import { AgentChat, SESION_GUARDADA } from "./components/AgentChat";
+import { CodigoDuplicado } from "./components/CodigoDuplicado";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { DuplicateDiffModal } from "./components/DuplicateDiffModal";
 import { DuplicatesTable, type Fila } from "./components/DuplicatesTable";
@@ -50,8 +51,11 @@ export default function App() {
   const [comparar, setComparar] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [evaluaciones, setEvaluaciones] = useState<string[]>([]);
+  const [evalsVivas, setEvalsVivas] = useState(false);
   const [sesiones, setSesiones] = useState<SesionRemota[]>([]);
   const [agenteActivo, setAgenteActivo] = useState(false);
+  const [analisis, setAnalisis] = useState<AnalisisDuplicadosContrato | null>(null);
+  const [metricas, setMetricas] = useState<MetricasContrato | null>(null);
   const [chatKey, setChatKey] = useState(0);
 
   useEffect(() => {
@@ -59,30 +63,58 @@ export default function App() {
   }, [tema]);
 
   function recargar() {
-    cargarPlan()
-      .then((datos) => {
-        setPlan(datos);
+    void (async () => {
+      const [planR, sesionesR, logsR, evalsR, analisisR, metricasR] = await Promise.allSettled([
+        cargarPlan(),
+        listarSesiones(),
+        listarLogs(),
+        listarEvaluaciones(),
+        cargarAnalisis(),
+        cargarMetricas(),
+      ]);
+      const guardadas = metricasR.status === "fulfilled" ? metricasR.value : null;
+      if (guardadas) {
+        setMetricas(guardadas);
+      }
+      if (analisisR.status === "fulfilled") {
+        setAnalisis(analisisR.value);
+      }
+      if (planR.status === "fulfilled") {
+        setPlan(planR.value);
         setError("");
-      })
-      .catch((fallo: unknown) => {
+      } else {
         setPlan(null);
+        const fallo = planR.reason;
         setError(fallo instanceof Error ? fallo.message : "No hay conexión con el agente.");
-      });
-    listarSesiones()
-      .then((datos) => {
-        setSesiones(datos);
+      }
+      if (sesionesR.status === "fulfilled") {
+        setSesiones(sesionesR.value);
         setAgenteActivo(true);
-      })
-      .catch(() => {
+      } else if (guardadas) {
+        setSesiones(guardadas.sesiones);
+        setAgenteActivo(true);
+      } else {
         setSesiones([]);
         setAgenteActivo(false);
-      });
-    listarLogs()
-      .then((datos) => setLogs(lineasDe(datos)))
-      .catch(() => setLogs([]));
-    listarEvaluaciones()
-      .then((datos) => setEvaluaciones(lineasDe(datos)))
-      .catch(() => setEvaluaciones([]));
+      }
+      const logsVivos = logsR.status === "fulfilled" ? lineasDe(logsR.value) : [];
+      setLogs(logsVivos.length > 0 ? logsVivos : (guardadas?.logs ?? []));
+      if (evalsR.status === "fulfilled") {
+        const lineas = lineasDe(evalsR.value);
+        setEvaluaciones(lineas);
+        setEvalsVivas(true);
+        if (sesionesR.status === "fulfilled") {
+          void guardarInstantanea({
+            evaluaciones: lineas.length,
+            evaluacionesLineas: lineas.slice(0, 400),
+            logs: logsVivos.slice(0, 400),
+          }).catch(() => undefined);
+        }
+      } else {
+        setEvalsVivas(false);
+        setEvaluaciones(guardadas?.evaluacionesLineas ?? []);
+      }
+    })();
   }
 
   useEffect(() => {
@@ -184,12 +216,10 @@ export default function App() {
         <div className="d-flex align-items-center gap-2">
           <span className="avatar">CS</span>
           <strong>calidad-software</strong>
-          <div className="ms-auto d-flex gap-2">
-            {tab !== "chat" ? (
-              <button type="button" className="btn btn-dark btn-sm" onClick={chatNuevo}>
-                New Chat
-              </button>
-            ) : null}
+            <div className="ms-auto d-flex gap-2">
+            <button type="button" className="btn btn-dark btn-sm" onClick={chatNuevo}>
+              New Chat
+            </button>
             <button
               type="button"
               className="btn btn-outline-secondary btn-sm"
@@ -215,10 +245,15 @@ export default function App() {
         </ul>
       </header>
       <div className={tab === "chat" ? "d-flex flex-column flex-grow-1 min-vh-0" : "d-none"}>
-        <AgentChat key={chatKey} onActividad={recargar} onVolver={() => setTab("agent")} onNuevo={chatNuevo} />
+        <AgentChat key={chatKey} onActividad={recargar} />
       </div>
       <main className={tab === "chat" ? "d-none" : "container-fluid py-3 d-grid gap-3 overflow-auto flex-grow-1"}>
-        <KpiRow plan={plan} runs={agenteActivo ? sesiones.length : null} evaluaciones={agenteActivo ? evaluaciones.length : null} turnos={turnos} />
+        <KpiRow
+          runs={agenteActivo ? sesiones.length : (metricas?.runs ?? null)}
+          evaluaciones={evalsVivas ? evaluaciones.length : (metricas?.evaluaciones ?? null)}
+          duplicados={analisis && !analisis.pendiente ? analisis.porcentaje : null}
+          turnos={sesiones.length > 0 ? turnos : agenteActivo ? null : (metricas?.turnosPromedio ?? null)}
+        />
         {!agenteActivo && error ? (
           <div className="alert alert-warning mb-0">
             {error} Arranca agent-sdk dev en la carpeta calidad-software.
@@ -255,23 +290,29 @@ export default function App() {
               ) : null}
             </div>
             {aviso ? <div className="px-3 pt-3"><div className="alert alert-secondary mb-0">{aviso}</div></div> : null}
-            {tab === "logs" ? (
+            {tab === "duplicados" ? (
+              <>
+                <CodigoDuplicado analisis={analisis} filtro={filtro} />
+                <h3 className="h6 px-3 pt-3 mb-0">Sesiones repetidas del historial</h3>
+                <DuplicatesTable filas={lista} onAbrir={setSeleccion} />
+              </>
+            ) : tab === "logs" ? (
               <ul className="list-group list-group-flush">
-                {(logs.length > 0 ? logs : lista.map((sesion) => `${sesion.updatedAt} ${sesion.id}`)).map((linea) => (
-                  <li className="list-group-item bg-transparent mono" key={linea}>
+                {(logs.length > 0 ? logs : lista.map((sesion) => `${sesion.updatedAt} ${sesion.id}`)).map((linea, indice) => (
+                  <li className="list-group-item bg-transparent mono" key={`${indice}-${linea.slice(0, 48)}`}>
                     {linea}
                   </li>
                 ))}
               </ul>
             ) : tab === "evaluations" ? (
               <ul className="list-group list-group-flush">
-                {(evaluaciones.length > 0 ? evaluaciones : ["Sin evaluaciones. agent-sdk dev tiene que estar activo."]).map((linea) => (
-                  <li className="list-group-item bg-transparent mono" key={linea}>
+                {(evaluaciones.length > 0 ? evaluaciones : ["Sin evaluaciones. agent-sdk dev tiene que estar activo."]).map((linea, indice) => (
+                  <li className="list-group-item bg-transparent mono" key={`${indice}-${linea.slice(0, 48)}`}>
                     {linea}
                   </li>
                 ))}
               </ul>
-            ) : tab === "runs" && runsVisibles.length > 0 ? (
+            ) : runsVisibles.length > 0 ? (
               <ul className="list-group list-group-flush">
                 {runsVisibles.map((sesion) => (
                     <li className="list-group-item bg-transparent" key={sesion.sessionId}>
@@ -283,7 +324,7 @@ export default function App() {
                   ))}
               </ul>
             ) : (
-              <DuplicatesTable filas={lista} onAbrir={setSeleccion} />
+              <p className="text-secondary mb-0 p-3">No hay runs para este filtro.</p>
             )}
           </section>
         ) : null}

@@ -2,9 +2,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineChannel, GET, POST } from "@grok/agent-sdk/channels";
 import * as z from "zod/v4";
-import { planDuplicadosSchema, resultadoRunsSchema } from "../lib/contratos";
+import { instantaneaSchema, planDuplicadosSchema, resultadoRunsSchema } from "../lib/contratos";
 import { aplicarDuplicados, planDuplicados } from "../lib/eliminar-duplicados";
 import { eliminarRuns } from "../lib/eliminar-runs";
+import { metricasActuales } from "../lib/metricas";
+import { leerAnalisis, leerHistorial, leerVerificacion } from "../lib/persistencia";
 
 const sessionsDir = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -28,6 +30,36 @@ export default defineChannel({
           borrados: resultado.borrados,
           conservados: resultado.conservar.map((sesion) => sesion.id),
         });
+      },
+    }),
+    GET("/metricas", {
+      querySchema: z.object({}),
+      async handler() {
+        return Response.json(await metricasActuales(sessionsDir));
+      },
+    }),
+    GET("/duplicados-codigo", {
+      querySchema: z.object({}),
+      async handler() {
+        return Response.json(await leerAnalisis());
+      },
+    }),
+    GET("/verificacion", {
+      querySchema: z.object({}),
+      async handler() {
+        return Response.json(await leerVerificacion());
+      },
+    }),
+    GET("/historial", {
+      querySchema: z.object({}),
+      async handler() {
+        return Response.json(await leerHistorial());
+      },
+    }),
+    POST("/instantanea", {
+      bodySchema: instantaneaSchema,
+      async handler(_request, { body }) {
+        return Response.json(await metricasActuales(sessionsDir, body));
       },
     }),
     POST("/eliminar-runs", {

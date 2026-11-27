@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   continuarSesion,
   crearSesion,
-  eventosDe,
-  listarSesiones,
   descargarInforme,
+  eventosDe,
+  informeCerrado,
+  listarSesiones,
   transcripcion,
   turnoActivo,
+  type Informe,
   type Mensaje,
   type Rol,
   type SesionChat,
@@ -25,11 +27,39 @@ const BADGE: Record<Rol, string> = {
 
 type Props = {
   onActividad: () => void;
-  onVolver: () => void;
-  onNuevo: () => void;
 };
 
-export function AgentChat({ onActividad, onVolver, onNuevo }: Props) {
+function faseDe(mensajes: Mensaje[]): string {
+  const ultimo = [...mensajes].reverse().find((mensaje) => mensaje.rol !== "usuario");
+  if (!ultimo) {
+    return "El coordinador está leyendo el repositorio…";
+  }
+  if (ultimo.rol === "Analista") {
+    return "Analista revisando requisitos…";
+  }
+  if (ultimo.rol === "Dev") {
+    return "Dev revisando código y duplicados…";
+  }
+  if (ultimo.rol === "QA") {
+    return "QA ejecutando verificaciones…";
+  }
+  return "Coordinador analizando el documento o repositorio…";
+}
+
+function Descargas({ informe }: { informe: Informe }) {
+  return (
+    <div className="btn-group">
+      <button type="button" className="btn btn-light btn-sm" onClick={() => descargarInforme(informe, "md")}>
+        Descargar reporte
+      </button>
+      <button type="button" className="btn btn-light btn-sm" onClick={() => descargarInforme(informe, "pdf")}>
+        PDF
+      </button>
+    </div>
+  );
+}
+
+export function AgentChat({ onActividad }: Props) {
   const [sesion, setSesion] = useState<SesionChat | null>(() => {
     const guardada = sessionStorage.getItem(SESION_GUARDADA);
     if (!guardada) {
@@ -45,6 +75,7 @@ export function AgentChat({ onActividad, onVolver, onNuevo }: Props) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [revisando, setRevisando] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -62,9 +93,18 @@ export function AgentChat({ onActividad, onVolver, onNuevo }: Props) {
     let activo = true;
     void (async () => {
       let eventos = await pintar(sesion.sessionId).catch(() => []);
+      if (activo) {
+        setRevisando(turnoActivo(eventos));
+      }
       while (activo && turnoActivo(eventos)) {
         await new Promise((resolver) => window.setTimeout(resolver, 1500));
         eventos = await pintar(sesion.sessionId).catch(() => eventos);
+        if (activo) {
+          setRevisando(turnoActivo(eventos));
+        }
+      }
+      if (activo) {
+        setRevisando(false);
       }
     })();
     return () => {
@@ -130,27 +170,36 @@ export function AgentChat({ onActividad, onVolver, onNuevo }: Props) {
     }
   }
 
+  const informe = { sesionId: sesion?.sessionId ?? null, mensajes };
+  const trabajando = enviando || revisando;
+  const terminado = !trabajando && informeCerrado(mensajes);
+
   return (
     <section className="d-flex flex-column flex-grow-1 min-vh-0 h-100 bg-body">
       <div className="border-bottom px-3 py-2 d-flex flex-wrap align-items-center gap-2">
-        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onVolver}>
-          ← Volver al panel
-        </button>
         <span className="mono text-secondary">{sesion?.sessionId ?? "sin sesión"}</span>
-        <div className="ms-auto d-flex gap-2">
-          <button
-            type="button"
-            className="btn btn-outline-dark btn-sm"
-            disabled={mensajes.length === 0}
-            onClick={() => descargarInforme({ sesionId: sesion?.sessionId ?? null, mensajes })}
-          >
-            Descargar reporte
-          </button>
-          <button type="button" className="btn btn-dark btn-sm" onClick={onNuevo}>
-            New Chat
-          </button>
-        </div>
       </div>
+      {trabajando ? (
+        <div className="px-3 pt-3" role="status" aria-live="polite">
+          <div className="alert alert-info mb-0">
+            <div className="d-flex align-items-center gap-2">
+              <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              <span>{faseDe(mensajes)}</span>
+            </div>
+            <div className="progress mt-2" style={{ height: "0.35rem" }}>
+              <div className="progress-bar progress-bar-striped progress-bar-animated w-100" />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {terminado ? (
+        <div className="px-3 pt-3">
+          <div className="alert alert-success d-flex flex-wrap align-items-center gap-2 mb-0">
+            <span>✅ Revisión finalizada: Ya terminé de analizar el documento/repositorio</span>
+            <Descargas informe={informe} />
+          </div>
+        </div>
+      ) : null}
       <div className="flex-grow-1 overflow-auto p-3 d-grid gap-3 align-content-start">
         {mensajes.length === 0 ? (
           <p className="text-secondary mb-0">
@@ -165,7 +214,6 @@ export function AgentChat({ onActividad, onVolver, onNuevo }: Props) {
             </div>
           </article>
         ))}
-        {enviando ? <p className="text-secondary mb-0">El coordinador está trabajando…</p> : null}
         {error ? <div className="alert alert-warning mb-0">{error}</div> : null}
       </div>
       <form className="border-top p-3 d-flex gap-2" onSubmit={(event) => void enviar(event)}>

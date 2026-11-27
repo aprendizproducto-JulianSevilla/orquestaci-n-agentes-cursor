@@ -6,7 +6,7 @@ Si la fuente es un repositorio y no hay requisito formal, toma el README como fu
 
 1. Lista cada criterio de aceptación con un id estable: `C1`, `C2`, y así.
 2. Para cada criterio, di si el código lo cumple, lo incumple o no lo cubre.
-3. Cita la evidencia: el texto del criterio, o la ruta y el símbolo del código.
+3. Cita la evidencia: el texto del criterio, o la ruta, el símbolo y las líneas que devolvió `leer_archivo_repositorio`.
 4. Un comportamiento presente sin criterio queda como pregunta abierta, no como defecto.
 5. Si el inventario trae señales `interfaz` o `postman`, trátalas como contrato: di qué criterio cubren.
 

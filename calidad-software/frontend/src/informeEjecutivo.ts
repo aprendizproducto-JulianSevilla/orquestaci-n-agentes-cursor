@@ -42,13 +42,23 @@ function proyectoDe(informe: Informe, dictamen: string): string {
   return declarado?.[1]?.trim() || "repositorio";
 }
 
+const RUIDO = /^(voy a\b|delego\b|el inventario\b|pensando\b|ahora voy\b|primero voy\b|voy a leer\b|voy a revisar\b)/i;
+
+function limpiar(texto: string): string {
+  return texto
+    .split("\n")
+    .filter((linea) => !RUIDO.test(linea.trim()))
+    .join("\n")
+    .trim();
+}
+
 function dictamenDe(informe: Informe): string {
   const candidatos = informe.mensajes.filter(
     (mensaje) => mensaje.rol === "Coordinador" && /veredicto|informe ejecutivo/i.test(mensaje.texto),
   );
   const elegido = candidatos.at(-1)?.texto ?? "";
   const marca = elegido.search(/##\s+Informe ejecutivo/i);
-  return marca >= 0 ? elegido.slice(marca) : elegido;
+  return limpiar(marca >= 0 ? elegido.slice(marca) : elegido);
 }
 
 function linea(texto: string, etiqueta: string): string {
@@ -129,7 +139,13 @@ function requisitosDe(texto: string): Requisito[] {
   return seccion
     .split("\n")
     .map((fila) => fila.trim())
-    .filter((fila) => fila.startsWith("|") && !/^\|\s*-+/.test(fila) && !/descripción/i.test(fila))
+    .filter((fila) => {
+      if (!fila.startsWith("|")) {
+        return false;
+      }
+      const celdas = fila.split("|").map((celda) => celda.trim()).filter(Boolean);
+      return celdas.length >= 2 && celdas[0] !== "ID" && !/^[-:| ]+$/.test(celdas[0] ?? "");
+    })
     .map((fila) => {
       const celdas = fila.split("|").map((celda) => celda.trim()).filter(Boolean);
       const estado = (celdas[2] ?? "").toLowerCase();
@@ -157,6 +173,17 @@ function pruebasDe(texto: string): { existen: string; faltan: string } {
   };
 }
 
+function pasosDe(solucion: string): string {
+  const partes = solucion
+    .split(/\s*(?=\d+[.)\]]\s+)/)
+    .map((paso) => paso.replace(/^\d+[.)\]]\s*/, "").trim())
+    .filter(Boolean);
+  if (partes.length < 2) {
+    return solucion;
+  }
+  return partes.map((paso, indice) => `${indice + 1}. ${paso}`).join(" ");
+}
+
 function slug(nombre: string): string {
   const limpio = nombre
     .normalize("NFD")
@@ -169,28 +196,43 @@ function slug(nombre: string): string {
 
 export function construirReporte(informe: Informe, ahora = new Date()): Reporte {
   const dictamen = dictamenDe(informe);
+  const fecha = ahora.toLocaleString("es-CO", { hour12: false });
+  const dia = ahora.toISOString().slice(0, 10);
+  if (!/veredicto|informe ejecutivo/i.test(dictamen)) {
+    return {
+      archivo: `reporte-calidad-repositorio-${dia}.md`,
+      markdown: [
+        `# Informe ejecutivo de hallazgos y soluciones`,
+        ``,
+        `- **Fecha y hora:** ${fecha}`,
+        `- **Sesión:** ${informe.sesionId ?? "sin sesión"}`,
+        `- **Veredicto final:** SIN VEREDICTO`,
+        ``,
+        `El coordinador todavía no cerró el informe ejecutivo de esta sesión.`,
+        ``,
+      ].join("\n"),
+    };
+  }
   const proyecto = proyectoDe(informe, dictamen);
   const veredicto = veredictoDe(dictamen);
   const fallos = fallosDe(dictamen);
   const requisitos = requisitosDe(dictamen);
   const metricas = metricasDe(dictamen, requisitos);
   const pruebas = pruebasDe(dictamen);
-  const observaciones = listaDe(dictamen, "Observaciones", "$");
-  const fecha = ahora.toLocaleString("es-CO", { hour12: false });
-  const dia = ahora.toISOString().slice(0, 10);
+  const observaciones = listaDe(dictamen, "Observaciones", "$").filter((item) => !RUIDO.test(item));
   const fallosTexto =
     fallos.length === 0
       ? "No se encontraron fallos."
       : fallos
           .map(
             (fallo) =>
-              `### ${fallo.id}. ${fallo.titulo}\n\n- **Severidad:** ${fallo.severidad}\n- **¿Qué está fallando?** ${fallo.que}\n- **¿Dónde ocurre?** ${fallo.donde}\n- **Impacto en el usuario o negocio:** ${fallo.impacto}\n- **¿Cómo solucionarlo?** ${fallo.solucion}`,
+              `### ${fallo.id}. ${fallo.titulo}\n\n- **Severidad:** ${fallo.severidad}\n- **¿Qué está fallando?** ${fallo.que}\n- **Archivo y función:** ${fallo.donde}\n- **Impacto en el usuario o negocio:** ${fallo.impacto}\n- **¿Cómo solucionarlo?** ${pasosDe(fallo.solucion)}`,
           )
           .join("\n\n");
   const tabla =
     requisitos.length === 0
       ? "El dictamen no trajo una tabla de requisitos."
-      : ["| ID | Descripción | Estado |", "| --- | --- | --- |", ...requisitos.map((requisito) => `| ${requisito.id} | ${requisito.descripcion} | ${requisito.cumple ? "✅ Cumple" : "❌ Incumple"} |`)].join("\n");
+      : ["| ID | Criterio | Estado |", "| --- | --- | --- |", ...requisitos.map((requisito) => `| ${requisito.id} | ${requisito.descripcion} | ${requisito.cumple ? "Cumple" : "Incumple"} |`)].join("\n");
   const observacionesTexto = observaciones.length === 0 ? "- Sin observaciones adicionales." : observaciones.map((item) => `- ${item}`).join("\n");
   const markdown = [
     `# Informe ejecutivo de hallazgos y soluciones`,

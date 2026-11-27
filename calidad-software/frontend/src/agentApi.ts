@@ -1,4 +1,5 @@
 import { construirReporte } from "./informeEjecutivo";
+import { descargarPdf } from "./pdfInforme";
 
 export type Rol = "usuario" | "Coordinador" | "Analista" | "Dev" | "QA";
 
@@ -13,14 +14,22 @@ export type Informe = {
   mensajes: Mensaje[];
 };
 
-export function descargarInforme(informe: Informe) {
+export function descargarInforme(informe: Informe, formato: "md" | "pdf" = "md") {
   const reporte = construirReporte(informe);
+  if (formato === "pdf") {
+    descargarPdf(reporte);
+    return;
+  }
   const archivo = new Blob([reporte.markdown], { type: "text/markdown;charset=utf-8" });
   const enlace = document.createElement("a");
   enlace.href = URL.createObjectURL(archivo);
   enlace.download = reporte.archivo;
   enlace.click();
   URL.revokeObjectURL(enlace.href);
+}
+
+export function informeCerrado(mensajes: Mensaje[]): boolean {
+  return mensajes.some((mensaje) => mensaje.rol === "Coordinador" && /##\s+Informe ejecutivo|veredicto\s*:/i.test(mensaje.texto));
 }
 
 export type SesionChat = {
